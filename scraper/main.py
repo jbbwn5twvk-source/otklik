@@ -130,7 +130,7 @@ def main():
         for m in mail.fetch(mails_seen):
             tg(mail_msg(m))
             mails_seen.add(m["mid"])
-        status["Почта"] = "ok" if os.getenv("GMAIL_USER") else "не подключена"
+        status["Почта"] = "ok" if (os.getenv("MAIL_USER") or os.getenv("GMAIL_USER")) else "не подключена"
         if state["errors"].pop("Почта", None):
             tg("✅ Почта снова читается.")
     except Exception as e:
@@ -138,7 +138,7 @@ def main():
         status["Почта"] = f"ошибка: {e}"[:200]
         if "Почта" not in state["errors"]:
             tg(f"⚠️ Не получилось прочитать почту: {E(str(e)[:200])}\n"
-               "Проверьте GMAIL_USER и пароль приложения в секретах.")
+               "Проверьте MAIL_USER и MAIL_PASSWORD (пароль для внешнего приложения) в секретах.")
         state["errors"]["Почта"] = str(e)[:200]
 
     state["seen"] = list(seen | {o["id"] for o in fresh})[-5000:]
