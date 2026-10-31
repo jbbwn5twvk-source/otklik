@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Отклик — лента заказов</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1c1a;--mute:#6b6862;--line:#e4e1da;--acc:#c2410c;--tag:#f1ede6}
+@media (prefers-color-scheme:dark){:root{--bg:#161514;--card:#201f1d;--ink:#eeebe5;--mute:#a19d95;--line:#33312d;--acc:#fb923c;--tag:#2b2926}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{max-width:860px;margin:0 auto;padding:24px 16px 8px}
+h1{margin:0;font-size:26px;letter-spacing:-.02em}
+h1 span{color:var(--acc)}
+.meta{color:var(--mute);font-size:13px;margin-top:4px}
+.bar{max-width:860px;margin:0 auto;padding:8px 16px;display:flex;flex-wrap:wrap;gap:8px}
+.bar button,.bar input{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+.bar input{flex:1;min-width:160px;border-radius:10px;cursor:text}
+.bar button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+main{max-width:860px;margin:0 auto;padding:8px 16px 48px;display:grid;gap:10px}
+.o{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.o h2{margin:0 0 4px;font-size:16px;line-height:1.35}
+.o h2 a{color:inherit;text-decoration:none}
+.o h2 a:hover{color:var(--acc)}
+.row{display:flex;flex-wrap:wrap;gap:6px;font-size:12px;color:var(--mute);margin-bottom:6px}
+.t{background:var(--tag);border-radius:6px;padding:1px 7px}
+.price{color:var(--acc);font-weight:600}
+.o p{margin:0;color:var(--mute);font-size:14px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.empty{color:var(--mute);text-align:center;padding:40px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Откл<span>и</span>к</h1>
+  <div class="meta" id="meta">Загружаю…</div>
+</header>
+<div class="bar" id="bar"></div>
+<div class="bar"><input id="q" placeholder="Поиск по заказам"></div>
+<main id="list"></main>
+<script>
+const CATS=["Все","Презентации","Excel","Тексты","Python","Сайты","Другое"];
+let all=[],cat="Все",src="Все";
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const money=o=>o.salary||(o.price?o.price.toLocaleString("ru")+" ₽":"цена не указана");
+const ago=d=>{const m=Math.round((Date.now()-new Date(d))/6e4);return isNaN(m)?"":m<60?m+" мин назад":m<1440?Math.round(m/60)+" ч назад":Math.round(m/1440)+" дн назад"};
+function bar(){
+  const srcs=["Все",...new Set(all.map(o=>o.source))];
+  const b=(v,cur,k)=>`<button class="${v===cur?"on":""}" data-${k}="${esc(v)}">${esc(v)}</button>`;
+  document.getElementById("bar").innerHTML=CATS.map(c=>b(c,cat,"c")).join("")+srcs.map(s=>b(s,src,"s")).join("");
+}
+function draw(){
+  const q=document.getElementById("q").value.toLowerCase();
+  const xs=all.filter(o=>(cat==="Все"||o.cat===cat)&&(src==="Все"||o.source===src)&&(!q||(o.title+" "+o.text).toLowerCase().includes(q)));
+  document.getElementById("list").innerHTML=xs.length?xs.map(o=>`<article class="o">
+    <h2><a href="${esc(o.url)}" target="_blank" rel="noopener">${esc(o.title)}</a></h2>
+    <div class="row"><span class="price">${esc(money(o))}</span><span class="t">${esc(o.source)}${o.channel?" · @"+esc(o.channel):""}</span><span class="t">${esc(o.cat)}</span>${o.offers!=null?`<span>откликов: ${o.offers}</span>`:""}<span>${ago(o.found||o.date)}</span></div>
+    <p>${esc(o.text)}</p></article>`).join(""):`<div class="empty">Ничего не нашлось</div>`;
+}
+document.addEventListener("click",e=>{const t=e.target;if(t.dataset.c){cat=t.dataset.c;bar();draw()}if(t.dataset.s){src=t.dataset.s;bar();draw()}});
+document.getElementById("q").addEventListener("input",draw);
+fetch("data/orders.json?"+Date.now()).then(r=>r.json()).then(d=>{
+  all=d.orders||[];
+  document.getElementById("meta").textContent=`Обновлено ${d.updated||"—"} · ${all.length} заказов · `+Object.entries(d.status||{}).map(([k,v])=>k+": "+v).join(", ");
+  bar();draw();
+}).catch(()=>{document.getElementById("meta").textContent="Лента ещё не собрана — запустите «Обновить ленту» в Actions."});
+</script>
+</body>
+</html>
