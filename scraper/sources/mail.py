@@ -1,7 +1,8 @@
-"""Уведомления о сообщениях заказчиков (Авито, Kwork) из писем в Gmail.
+"""Уведомления о сообщениях заказчиков (Авито, Kwork) из писем на почте.
 
-Работает, только если в GitHub Secrets заданы GMAIL_USER и GMAIL_APP_PASSWORD
-(пароль приложения Google, не обычный пароль). Письма открываются только для чтения
+Работает, только если в GitHub Secrets заданы MAIL_USER и MAIL_PASSWORD
+(пароль для внешнего приложения, не обычный пароль). Подходят Mail.ru (и inbox/list/bk),
+Яндекс и Gmail; старые имена GMAIL_USER / GMAIL_APP_PASSWORD тоже работают. Письма открываются только для чтения
 и не помечаются прочитанными; читаются только письма от отправителей из MAIL_SENDERS.
 """
 import email
@@ -16,6 +17,15 @@ from config import MAIL_SENDERS, MAIL_SUBJECT
 
 _SUBJ = re.compile(MAIL_SUBJECT, re.I)
 _LINK = re.compile(r"https://(?:www\.|m\.)?(?:avito\.ru|kwork\.ru)/[^\s\"'<>]+", re.I)
+
+
+def _host(user):
+    domain = user.split("@")[-1].lower()
+    if domain in ("mail.ru", "inbox.ru", "list.ru", "bk.ru", "internet.ru", "my.com"):
+        return "imap.mail.ru"
+    if domain in ("yandex.ru", "ya.ru", "yandex.com"):
+        return "imap.yandex.ru"
+    return "imap.gmail.com"
 
 
 def _h(v):
@@ -43,11 +53,12 @@ def _body(msg):
 
 
 def fetch(seen_ids):
-    user, pwd = os.getenv("GMAIL_USER"), os.getenv("GMAIL_APP_PASSWORD")
+    user = os.getenv("MAIL_USER") or os.getenv("GMAIL_USER")
+    pwd = os.getenv("MAIL_PASSWORD") or os.getenv("GMAIL_APP_PASSWORD")
     if not user or not pwd:
         return []
     since = (datetime.utcnow() - timedelta(days=2)).strftime("%d-%b-%Y")
-    box = imaplib.IMAP4_SSL("imap.gmail.com")
+    box = imaplib.IMAP4_SSL(_host(user))
     box.login(user, pwd)
     box.select("INBOX", readonly=True)
     out = []
