@@ -5,6 +5,7 @@
 """
 import html
 import json
+import re
 import os
 import sys
 import traceback
@@ -14,7 +15,8 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import KEEP_DAYS, TG_NOTIFY_MAX, TIME  # noqa: E402
+from config import (HOT, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
+                    MAX_OFFERS, TG_NOTIFY_MAX, TIME)
 from sources import hh, kwork, mail, telegram  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -25,6 +27,31 @@ MSK = timezone(timedelta(hours=3))
 TOKEN, CHAT = os.getenv("TELEGRAM_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
 SOURCES = {"Kwork": kwork.fetch, "hh.ru": hh.fetch, "Telegram": telegram.fetch}
 E = html.escape
+_HOT = re.compile(HOT, re.I)
+
+
+def is_hot(o):
+    return o.get("cat") in HOT_CATS or bool(_HOT.search(o.get("title", "")))
+
+
+def age_hours(o, now):
+    try:
+        d = datetime.fromisoformat(o.get("date", "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if d.tzinfo is None:
+        d = d.replace(tzinfo=timezone.utc)
+    return (now - d).total_seconds() / 3600
+
+
+def skip_reason(o, now):
+    """Почему заказ не надо присылать в бот (None — присылать)."""
+    a = age_hours(o, now)
+    if a is None or a > MAX_AGE_HOURS:
+        return "старый"
+    if o.get("offers") is not None and o["offers"] > MAX_OFFERS:
+        return "много откликов"
+    return None
 
 
 def load(p, default):
@@ -63,7 +90,8 @@ def money(o):
 
 def order_msg(o):
     src = o["source"] + (f" · @{o['channel']}" if o.get("channel") else "")
-    lines = [f"🆕 <b>{E(o['title'])}</b>",
+    head = "🔥 <b>ПРИОРИТЕТ</b> · " if is_hot(o) else "🆕 "
+    lines = [f"{head}<b>{E(o['title'])}</b>",
              f"{E(src)} · {E(o['cat'])} · {E(money(o))}"]
     if o.get("offers") is not None:
         lines.append(f"Откликов: {o['offers']}")
@@ -95,6 +123,9 @@ def main():
         try:
             got = fn()
             status[name] = f"ok ({len(got)})"
+            if name == "Telegram" and telegram.last_errors:
+                status[name] += f", не прочитано каналов: {len(telegram.last_errors)}"
+                print("Telegram:", telegram.last_errors)
             fresh += got
             if state["errors"].pop(name, None):
                 tg(f"✅ {name} снова работает.")
@@ -119,18 +150,31 @@ def main():
            "Дальше буду присылать только новые.")
         state["started"] = True
     else:
-        for o in new[:TG_NOTIFY_MAX]:
+        send, skipped = [], {}
+        for o in new:
+            why = skip_reason(o, now)
+            if why:
+                skipped[why] = skipped.get(why, 0) + 1
+            else:
+                send.append(o)
+        print("Не отправлено в бот:", skipped)
+        # Приоритетные первыми и без лимита, остальные — свежие сверху, в пределах лимита.
+        # Раньше лимит съедали hh и Kwork, и до Telegram очередь не доходила.
+        hot = [o for o in send if is_hot(o)]
+        rest = sorted((o for o in send if not is_hot(o)), key=lambda o: o.get("date", ""), reverse=True)
+        for o in hot + rest[:TG_NOTIFY_MAX]:
             tg(order_msg(o))
-        if len(new) > TG_NOTIFY_MAX:
-            tg(f"…и ещё {len(new) - TG_NOTIFY_MAX} новых заказов в ленте.")
+        if len(rest) > TG_NOTIFY_MAX:
+            tg(f"…и ещё {len(rest) - TG_NOTIFY_MAX} новых заказов в ленте.")
 
     # Сообщения от заказчиков (Авито, Kwork) из почты
     mails_seen = set(state.get("mails", []))
     try:
-        for m in mail.fetch(mails_seen):
+        for m in (mail.fetch(mails_seen) if MAIL_ENABLED else []):
             tg(mail_msg(m))
             mails_seen.add(m["mid"])
-        status["Почта"] = "ok" if (os.getenv("MAIL_USER") or os.getenv("GMAIL_USER")) else "не подключена"
+        status["Почта"] = ("на паузе" if not MAIL_ENABLED else
+                           "ok" if (os.getenv("MAIL_USER") or os.getenv("GMAIL_USER")) else "не подключена")
         if state["errors"].pop("Почта", None):
             tg("✅ Почта снова читается.")
     except Exception as e:

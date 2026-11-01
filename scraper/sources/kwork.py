@@ -1,5 +1,7 @@
 """Kwork: открытая биржа проектов (без входа)."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+
+MSK = timezone(timedelta(hours=3))
 
 from common import S, category, clean
 from config import KWORK_MAX_PRICE, KWORK_PAGES
@@ -31,7 +33,7 @@ def fetch():
             created = it.get("date_create") or ""
             try:
                 created = datetime.strptime(created, "%Y-%m-%d %H:%M:%S").replace(
-                    tzinfo=timezone.utc).isoformat()
+                    tzinfo=MSK).astimezone(timezone.utc).isoformat()  # Kwork отдаёт московское время
             except ValueError:
                 created = datetime.now(timezone.utc).isoformat()
             out.append({

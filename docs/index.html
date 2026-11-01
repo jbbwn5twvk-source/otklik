@@ -38,7 +38,7 @@ main{max-width:860px;margin:0 auto;padding:8px 16px 48px;display:grid;gap:10px}
 <div class="bar"><input id="q" placeholder="Поиск по заказам"></div>
 <main id="list"></main>
 <script>
-const CATS=["Все","Презентации","Excel","Тексты","Python","Сайты","Другое"];
+const CATS=["Все","Презентации","Дизайн","Excel","Тексты","Python","Сайты","Другое"];
 let all=[],cat="Все",src="Все";
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const money=o=>o.salary||(o.price?o.price.toLocaleString("ru")+" ₽":"цена не указана");

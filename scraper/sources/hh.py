@@ -13,7 +13,8 @@ def fetch():
     for q in HH_QUERIES:
         params = [("text", q), ("search_field", "name"), ("schedule", "remote"),
                   ("employment", "part"), ("employment", "project"),
-                  ("order_by", "publication_time"), ("items_on_page", "50")]
+                  ("order_by", "publication_time"), ("search_period", "1"),
+                  ("items_on_page", "50")]
         r = S.get("https://hh.ru/search/vacancy", params=params, timeout=30)
         r.raise_for_status()
         soup = BeautifulSoup(r.text, "html.parser")
@@ -36,6 +37,8 @@ def fetch():
                 "salary": salary.get_text(" ", strip=True) if salary else "",
                 "url": f"https://hh.ru/vacancy/{m.group(1)}",
                 "cat": category(title) or "Другое",
+                # hh не показывает время публикации в поиске: берём момент, когда вакансия
+                # впервые появилась в выдаче (поиск отсортирован по дате и ограничен сутками)
                 "date": datetime.now(timezone.utc).isoformat(),
             })
     return out
