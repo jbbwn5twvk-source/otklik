@@ -15,7 +15,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import (BOTS, BOTS_NO, HOT, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
+from config import (BOTS, BOTS_NO, HOT, LEADS, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
                     MAX_OFFERS, TG_NOTIFY_MAX, TIME, WATCH_ENABLED)
 from common import blocked  # noqa: E402
 from sources import hh, kwork, mail, telegram  # noqa: E402
@@ -31,6 +31,12 @@ E = html.escape
 _HOT = re.compile(HOT, re.I)
 _BOTS = re.compile(BOTS, re.I)
 _BOTS_NO = re.compile(BOTS_NO, re.I)
+_LEADS = re.compile(LEADS, re.I)
+
+
+def is_lead(o):
+    """Прямая заявка: «нужен сайт», «ищу, кто сделает бота»."""
+    return bool(_LEADS.search(o.get("title", "") + " " + o.get("text", "")[:300]))
 
 
 def is_bot(o):
@@ -46,7 +52,7 @@ def is_hot(o):
     if is_max_bot(o):
         return False
     return (o.get("cat") in HOT_CATS or bool(_HOT.search(o.get("title", "")))
-            or is_bot(o))
+            or is_bot(o) or is_lead(o))
 
 
 def age_hours(o, now):
@@ -137,6 +143,8 @@ def money(o):
 def order_msg(o):
     src = o["source"] + (f" · @{o['channel']}" if o.get("channel") else "")
     head = "🔥 <b>ПРИОРИТЕТ</b> · " if is_hot(o) else "🆕 "
+    if is_lead(o) and is_hot(o):
+        head += "🎯 <b>ЗАЯВКА</b> · "
     lines = [f"{head}<b>{E(o['title'])}</b>",
              f"{E(src)} · {E(o['cat'])} · {E(money(o))}"]
     if o.get("offers") is not None:
