@@ -15,7 +15,7 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import (HOT, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
+from config import (BOTS, BOTS_NO, HOT, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
                     MAX_OFFERS, TG_NOTIFY_MAX, TIME, WATCH_ENABLED)
 from common import blocked  # noqa: E402
 from sources import hh, kwork, mail, telegram  # noqa: E402
@@ -29,10 +29,24 @@ TOKEN, CHAT = os.getenv("TELEGRAM_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
 SOURCES = {"Kwork": kwork.fetch, "hh.ru": hh.fetch, "Telegram": telegram.fetch}
 E = html.escape
 _HOT = re.compile(HOT, re.I)
+_BOTS = re.compile(BOTS, re.I)
+_BOTS_NO = re.compile(BOTS_NO, re.I)
+
+
+def is_bot(o):
+    return bool(_BOTS.search(o.get("title", "")))
+
+
+def is_max_bot(o):
+    """Бот для мессенджера Max — не берём (Max может быть упомянут только в описании)."""
+    return is_bot(o) and bool(_BOTS_NO.search(o.get("title", "") + " " + o.get("text", "")))
 
 
 def is_hot(o):
-    return o.get("cat") in HOT_CATS or bool(_HOT.search(o.get("title", "")))
+    if is_max_bot(o):
+        return False
+    return (o.get("cat") in HOT_CATS or bool(_HOT.search(o.get("title", "")))
+            or is_bot(o))
 
 
 def age_hours(o, now):
@@ -47,6 +61,8 @@ def age_hours(o, now):
 
 def skip_reason(o, now):
     """Почему заказ не надо присылать в бот (None — присылать)."""
+    if is_max_bot(o):
+        return "бот для Max"
     a = age_hours(o, now)
     if a is None or a > MAX_AGE_HOURS:
         return "старый"
