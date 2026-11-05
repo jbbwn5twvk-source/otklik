@@ -14,9 +14,9 @@ def _price(v):
         return 0
 
 
-def fetch():
+def fetch(pages=KWORK_PAGES):
     out = []
-    for page in range(1, KWORK_PAGES + 1):
+    for page in range(1, pages + 1):
         r = S.post("https://kwork.ru/projects", data={"page": page, "c": "all"}, timeout=30,
                    headers={"X-Requested-With": "XMLHttpRequest", "Accept": "application/json",
                             "Referer": "https://kwork.ru/projects"})

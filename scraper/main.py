@@ -16,7 +16,7 @@ import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
 from config import (HOT, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
-                    MAX_OFFERS, TG_NOTIFY_MAX, TIME)
+                    MAX_OFFERS, TG_NOTIFY_MAX, TIME, WATCH_ENABLED)
 from common import blocked  # noqa: E402
 from sources import hh, kwork, mail, telegram  # noqa: E402
 
@@ -53,6 +53,35 @@ def skip_reason(o, now):
     if o.get("offers") is not None and o["offers"] > MAX_OFFERS:
         return "много откликов"
     return None
+
+
+def watcher_running():
+    """Работает ли сейчас сторож (watch.yml) — спрашиваем у GitHub."""
+    repo = os.getenv("GITHUB_REPOSITORY")
+    if not (WATCH_ENABLED and repo):
+        return False
+    try:
+        r = requests.get(f"https://api.github.com/repos/{repo}/actions/workflows/watch.yml/runs",
+                         params={"status": "in_progress", "per_page": 1}, timeout=20,
+                         headers={"Authorization": f"Bearer {os.getenv('GITHUB_TOKEN', '')}"})
+        return r.ok and r.json().get("total_count", 0) > 0
+    except Exception:
+        return False
+
+
+WATCHING = None
+
+
+def watched(o):
+    """Приоритетные заказы Kwork мгновенно присылает сторож (watch.py) — здесь их не дублируем.
+    Если сторож не запущен, присылаем их как обычно."""
+    global WATCHING
+    if not (o.get("source") == "Kwork" and is_hot(o)):
+        return False
+    if WATCHING is None:
+        WATCHING = watcher_running()
+        print("Сторож работает:", WATCHING)
+    return WATCHING
 
 
 def load(p, default):
@@ -155,7 +184,7 @@ def main():
     else:
         send, skipped = [], {}
         for o in new:
-            why = skip_reason(o, now)
+            why = "у сторожа" if watched(o) else skip_reason(o, now)
             if why:
                 skipped[why] = skipped.get(why, 0) + 1
             else:
