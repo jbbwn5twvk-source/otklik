@@ -17,6 +17,7 @@ import requests
 sys.path.insert(0, str(Path(__file__).parent))
 from config import (HOT, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
                     MAX_OFFERS, TG_NOTIFY_MAX, TIME)
+from common import blocked  # noqa: E402
 from sources import hh, kwork, mail, telegram  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -137,12 +138,14 @@ def main():
             state["errors"][name] = str(e)[:200]
 
     fresh = list({o["id"]: o for o in fresh}.values())  # один пост может прийти дважды
+    fresh = [o for o in fresh if not blocked(o.get("title", ""), o.get("text", ""))]
     new = [o for o in fresh if o["id"] not in seen]
     for o in fresh:
         old[o["id"]] = {**old.get(o["id"], {}), **o, "found": old.get(o["id"], {}).get("found", now.isoformat())}
 
     cutoff = (now - timedelta(days=KEEP_DAYS)).isoformat()
-    orders = sorted((o for o in old.values() if o.get("found", "") >= cutoff),
+    orders = sorted((o for o in old.values() if o.get("found", "") >= cutoff
+                     and not blocked(o.get("title", ""), o.get("text", ""))),
                     key=lambda o: o.get("found", ""), reverse=True)
 
     if not state.get("started"):

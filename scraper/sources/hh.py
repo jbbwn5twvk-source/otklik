@@ -4,14 +4,14 @@ from datetime import datetime, timezone
 
 from bs4 import BeautifulSoup
 
-from common import S, category, clean
+from common import S, blocked, category, clean
 from config import HH_QUERIES
 
 
 def fetch():
     out, seen = [], set()
     for q in HH_QUERIES:
-        params = [("text", q), ("search_field", "name"), ("schedule", "remote"),
+        params = [("text", q), ("search_field", "name"), ("schedule", "remote"), ("work_format", "REMOTE"),
                   ("employment", "part"), ("employment", "project"),
                   ("order_by", "publication_time"), ("search_period", "1"),
                   ("items_on_page", "50")]
@@ -28,6 +28,10 @@ def fetch():
             card = a.find_parent(attrs={"data-qa": re.compile("vacancy-serp__vacancy")}) or a.parent
             salary = card.find(attrs={"data-qa": re.compile("compensation")}) if card else None
             company = card.find(attrs={"data-qa": re.compile("employer")}) if card else None
+            card_text = card.get_text(" ", strip=True) if card else ""
+            # Только удалёнка: отбрасываем офис и гибрид, даже если hh их подмешал
+            if blocked(title) or re.search(r"гибрид|на месте работодателя|в офисе", card_text, re.I):
+                continue
             out.append({
                 "id": f"hh-{m.group(1)}",
                 "source": "hh.ru",

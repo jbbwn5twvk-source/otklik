@@ -14,6 +14,11 @@ _CATS = {k: re.compile(v, re.I) for k, v in CATS.items()}
 _STOP = re.compile(STOP, re.I)
 
 
+def blocked(title, text=""):
+    """True, если заказ нам не подходит (стоп-слова в названии)."""
+    return bool(_STOP.search(title or ""))
+
+
 def category(title, body="", title_only=False):
     """Категория заказа или None, если не подходит."""
     if _STOP.search(title or ""):
