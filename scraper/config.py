@@ -32,6 +32,7 @@ TG_CHANNELS = [
     "work_editor", "Work4writers", "frilancekomfort", "FreeWorkFeed", "FrWork3",
     "rabota_freelancee", "rabota_go", "smmlancer", "juniors_rabota_jobs",
     "allgigs", "rabotka_zdes", "freegolup",   # 05.11: там бывают заказы на сайты и ботов
+    "jobpower",                               # 06.11: креативные вакансии (дизайн, SMM)
 ]
 # В канале пост берётся, если в первых строках есть категория, а в тексте признак удалёнки
 TG_REMOTE = r"удал[её]н|дистанц|remote|онлайн|фриланс|freelance|разов|проект|из дома|любой город|сдельн"
