@@ -72,7 +72,7 @@ LEADS = (r"(ищу|ищем|нужен|нужна|нужно|требуется|
 # Ссылки, которые бот подставляет в черновики откликов (drafts.py).
 # Пустая строка = в тексте будет «пришлю в ответ». Ссылку на профиль Kwork с презентациями можно вписать в "pres".
 PORTFOLIO = {
-    "sites": "https://claude.ai/artifact/YTUb3EA4wEHRvdzdMLvByA",   # Портфолио сайтов (нужен доступ по ссылке)
+    "sites": "https://anna-sites-studio.github.io/",   # Портфолио сайтов на GitHub Pages
     "pres": "",
 }
 DRAFTS_ENABLED = True
