@@ -15,9 +15,10 @@ from pathlib import Path
 import requests
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import (BOTS, BOTS_NO, HOT, LEADS, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
+from config import (BOTS, BOTS_NO, DRAFTS_ENABLED, HOT, LEADS, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
                     MAX_OFFERS, TG_NOTIFY_MAX, TIME, WATCH_ENABLED)
 from common import blocked  # noqa: E402
+from drafts import draft  # noqa: E402
 from sources import boards, hh, kwork, mail, telegram  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -152,8 +153,13 @@ def order_msg(o):
         lines.append(f"Откликов: {o['offers']}")
     if o.get("text"):
         lines.append(E(o["text"][:500]))
-    lines += [f"⏱ {estimate(o['cat'])}", f"🔗 {E(o['url'])}",
-              "<i>Перешлите это сообщение Claude — напишем отклик.</i>"]
+    lines += [f"⏱ {estimate(o['cat'])}", f"🔗 {E(o['url'])}"]
+    d = draft(o, lead=is_lead(o) and o.get("source") == "Telegram") if DRAFTS_ENABLED and is_hot(o) else ""
+    if d:
+        lines += ["✍️ Черновик (нажмите, чтобы скопировать):", f"<pre>{E(d)}</pre>",
+                  "<i>Сложный заказ? Перешлите его Claude.</i>"]
+    else:
+        lines.append("<i>Перешлите это сообщение Claude — напишем отклик.</i>")
     return "\n".join(lines)
 
 
@@ -164,6 +170,26 @@ def mail_msg(m):
     if m.get("url"):
         lines.append(f"🔗 {E(m['url'])}")
     return "\n".join(lines)
+
+
+def weekly(state, orders, now):
+    """Воскресенье после 19:00 по Москве: сводка за 7 дней, один раз в неделю."""
+    msk = now.astimezone(MSK)
+    week = msk.strftime("%G-%V")
+    if msk.weekday() != 6 or msk.hour < 19 or state.get("weekly") == week:
+        return
+    since = (now - timedelta(days=7)).isoformat()
+    last = [o for o in orders if o.get("found", "") >= since]
+    by, hot = {}, {}
+    for o in last:
+        by[o["source"]] = by.get(o["source"], 0) + 1
+        if is_hot(o):
+            hot[o["source"]] = hot.get(o["source"], 0) + 1
+    rows = "\n".join(f"• {E(k)}: {v} (приоритетных {hot.get(k, 0)})"
+                      for k, v in sorted(by.items(), key=lambda x: -x[1]))
+    tg(f"📊 <b>Неделя в ленте</b>. Заказов: {len(last)}, из них приоритетных: {sum(hot.values())}.\n{rows}\n"
+       "<i>Источник, где неделями нет приоритетных, можно убрать. Перешлите Claude, если что-то поменять.</i>")
+    state["weekly"] = week
 
 
 def main():
@@ -250,6 +276,7 @@ def main():
                "Проверьте MAIL_USER и MAIL_PASSWORD (пароль для внешнего приложения) в секретах.")
         state["errors"]["Почта"] = str(e)[:200]
 
+    weekly(state, orders, now)
     state["seen"] = list(seen | {o["id"] for o in fresh})[-5000:]
     state["mails"] = list(mails_seen)[-1000:]
     ORDERS.write_text(json.dumps({
