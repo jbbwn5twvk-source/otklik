@@ -40,13 +40,45 @@ def check(seen):
     return sent
 
 
+CODE_PATHS = ("scraper/", ".github/workflows/watch.yml", "requirements.txt")
+
+
+def code_changed():
+    """True, если после запуска этого сторожа в main залили новый код бота.
+    Тогда сторож запускает свою свежую копию и выходит, чтобы правки начали работать сразу."""
+    import os
+    import requests
+    repo, sha, tok = os.getenv("GITHUB_REPOSITORY"), os.getenv("GITHUB_SHA"), os.getenv("GITHUB_TOKEN")
+    if not (repo and sha and tok):
+        return False
+    h = {"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json"}
+    r = requests.get(f"https://api.github.com/repos/{repo}/compare/{sha}...main", headers=h, timeout=30)
+    if not r.ok:
+        return False
+    files = [f["filename"] for f in r.json().get("files", [])]
+    if not any(f.startswith(CODE_PATHS) and not f.endswith(".watch_seen.json") for f in files):
+        return False
+    d = requests.post(f"https://api.github.com/repos/{repo}/actions/workflows/watch.yml/dispatches",
+                      headers=h, json={"ref": "main"}, timeout=30)
+    print("Код обновился, перезапускаю сторожа:", d.status_code)
+    return d.status_code == 204
+
+
 def main():
     seen = set(load(STATE, {}).get("seen", []))
     seen |= set(load(SEEN_FILE, []))  # что прислал прошлый сторож
     end = time.time() + config.WATCH_MINUTES * 60
     errors = 0
+    next_code_check = time.time() + 600
     print(f"Сторож запущен, проверка каждые {config.WATCH_EVERY} с")
     while time.time() < end:
+        if time.time() >= next_code_check:
+            next_code_check = time.time() + 600
+            try:
+                if code_changed():
+                    break
+            except Exception:
+                traceback.print_exc()
         try:
             n = check(seen)
             if n:
