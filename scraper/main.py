@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from config import (BOTS, BOTS_NO, HOT, LEADS, HOT_CATS, KEEP_DAYS, MAIL_ENABLED, MAX_AGE_HOURS,  # noqa: E402
                     MAX_OFFERS, TG_NOTIFY_MAX, TIME, WATCH_ENABLED)
 from common import blocked  # noqa: E402
-from sources import hh, kwork, mail, telegram  # noqa: E402
+from sources import boards, hh, kwork, mail, telegram  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "docs" / "data"
@@ -26,7 +26,8 @@ ORDERS = DATA / "orders.json"
 STATE = DATA / "state.json"
 MSK = timezone(timedelta(hours=3))
 TOKEN, CHAT = os.getenv("TELEGRAM_TOKEN"), os.getenv("TELEGRAM_CHAT_ID")
-SOURCES = {"Kwork": kwork.fetch, "hh.ru": hh.fetch, "Telegram": telegram.fetch}
+SOURCES = {"Kwork": kwork.fetch, "hh.ru": hh.fetch, "Telegram": telegram.fetch,
+           "Weblancer": boards.weblancer, "Фриланс.ру": boards.freelance_ru}
 E = html.escape
 _HOT = re.compile(HOT, re.I)
 _BOTS = re.compile(BOTS, re.I)
@@ -193,6 +194,14 @@ def main():
     fresh = list({o["id"]: o for o in fresh}.values())  # один пост может прийти дважды
     fresh = [o for o in fresh if not blocked(o.get("title", ""), o.get("text", ""))]
     new = [o for o in fresh if o["id"] not in seen]
+    # Новый источник: в первый раз всё, что уже лежит на бирже, только запоминаем, а не шлём пачкой
+    known = set(state.get("sources", []))
+    if state.get("started"):
+        first = {o["source"] for o in fresh} - known - {"Kwork", "hh.ru", "Telegram", "Почта"}
+        new = [o for o in new if o["source"] not in first]
+        if first:
+            print("Новые источники, запоминаю без отправки:", first)
+    state["sources"] = sorted(known | {o["source"] for o in fresh})
     for o in fresh:
         old[o["id"]] = {**old.get(o["id"], {}), **o, "found": old.get(o["id"], {}).get("found", now.isoformat())}
 
